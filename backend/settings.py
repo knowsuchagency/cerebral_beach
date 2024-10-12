@@ -20,6 +20,16 @@ from decouple import config
 from dj_database_url import parse as db_url
 from corsheaders.defaults import default_headers
 
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
+sentry_sdk.init(
+    dsn="http://7f276137489b428db71e1248b046e7a9@default-glitchtip-16abe2-5-78-75-130.traefik.me/2",
+    integrations=[DjangoIntegration()],
+    auto_session_tracking=False,
+    traces_sample_rate=0
+)
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 

@@ -1,9 +1,6 @@
 from ninja import NinjaAPI, Router
-from django.middleware.csrf import get_token
-from django.http import HttpResponse
 from promptic import llm
 from pydantic import BaseModel
-from typing import List
 
 api = NinjaAPI()
 

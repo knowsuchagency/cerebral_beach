@@ -128,6 +128,7 @@ dependencies = [
     { name = "promptic" },
     { name = "psycopg2-binary" },
     { name = "python-decouple" },
+    { name = "sentry-sdk" },
 ]
 
 [package.metadata]
@@ -143,6 +144,7 @@ requires-dist = [
     { name = "promptic", specifier = ">=0.7.7" },
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
     { name = "python-decouple", specifier = ">=3.8" },
+    { name = "sentry-sdk", specifier = ">=2.16.0" },
 ]
 
 [[package]]
@@ -970,6 +972,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cb/67/94c6730ee4c34505b14d94040e2f31edf144c230b6b49e971b4f25ff8fab/s3transfer-0.10.2.tar.gz", hash = "sha256:0711534e9356d3cc692fdde846b4a1e4b0cb6519971860796e6bc4c7aea00ef6", size = 144095 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3c/4a/b221409913760d26cf4498b7b1741d510c82d3ad38381984a3ddc135ec66/s3transfer-0.10.2-py3-none-any.whl", hash = "sha256:eca1c20de70a39daee580aef4986996620f365c4e0fda6a86100231d62f1bf69", size = 82716 },
+]
+
+[[package]]
+name = "sentry-sdk"
+version = "2.16.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/80/63/59640a54963747d2c4b2d149412b2024abed13bacd4e8d16ae5babb97da0/sentry_sdk-2.16.0.tar.gz", hash = "sha256:90f733b32e15dfc1999e6b7aca67a38688a567329de4d6e184154a73f96c6892", size = 290180 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/aa/9f8dce2aec2e95d48c057ff3bcac48958cd15f67d4e9e80e74b46c324abf/sentry_sdk-2.16.0-py2.py3-none-any.whl", hash = "sha256:49139c31ebcd398f4f6396b18910610a0c1602f6e67083240c33019d1f6aa30c", size = 313785 },
 ]
 
 [[package]]

@@ -2,7 +2,9 @@ from ninja import NinjaAPI, Router
 from promptic import llm
 from pydantic import BaseModel
 
-api = NinjaAPI()
+api = NinjaAPI(
+    title="JIT Learning"
+)
 
 v1 = Router()
 

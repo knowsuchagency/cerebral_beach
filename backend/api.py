@@ -12,7 +12,10 @@ from typing import List, Optional
 
 from backend.core.models import Flashcard, FlashcardStudy, StudySession
 
-api = NinjaAPI(title="JIT Learning")
+api = NinjaAPI(
+    title="JIT Learning",
+    csrf=False,
+)
 
 v1 = Router()
 

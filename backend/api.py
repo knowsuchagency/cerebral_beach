@@ -6,7 +6,10 @@ import time
 from django.db.models import Avg
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Router
-from pydantic import BaseModel
+from ninja.responses import Response
+from pydantic import BaseModel, Field
+from typing import List, Optional
+import uuid
 
 from backend.core.models import Flashcard, FlashcardStudy, StudySession
 
@@ -23,29 +26,39 @@ class FlashCard(BaseModel):
 
 
 class FlashCards(BaseModel):
-    cards: list[FlashCard]
+    cards: List[FlashCard]
 
 
 class GenerateFlashcardsInput(BaseModel):
-    raw_data: str = None
-    pdf_base64: str = None
+    raw_data: Optional[str] = None
+    pdf_base64: Optional[str] = None
 
 
 class StudySessionCreate(BaseModel):
-    raw_data: str = None
-    pdf_base64: str = None
+    raw_data: Optional[str] = None
+    pdf_base64: Optional[str] = None
 
 
 class FlashcardStudyInput(BaseModel):
     flashcard_id: str
     knowledge_level: int
-    is_correct: bool
 
 
 class FlashcardResponse(BaseModel):
     id: str
     question: str
     answer: str
+
+
+# New response models
+class StudySessionResponse(BaseModel):
+    session_id: str = Field(..., description="The ID of the created study session")
+
+class FlashcardStudyResponse(BaseModel):
+    message: str = Field(..., description="A success message")
+
+class EndStudySessionResponse(BaseModel):
+    message: str = Field(..., description="A success message")
 
 
 def extract_content_from_pdf(pdf_base64):
@@ -86,12 +99,12 @@ def extract_content_from_pdf(pdf_base64):
     return result_response.text
 
 
-@v1.post("/generate-flashcards")
+@v1.post("/generate-flashcards", response=FlashCards)
 def generate_flashcards(
     request,
     flashcards_input: GenerateFlashcardsInput,
     model="azure/gpt-4o",
-):
+) -> FlashCards:
     if flashcards_input.pdf_base64:
         raw_data = extract_content_from_pdf(flashcards_input.pdf_base64)
     else:
@@ -153,8 +166,8 @@ def generate_flashcards(
     return flashcards
 
 
-@v1.post("/create-study-session")
-def create_study_session(request, session_input: StudySessionCreate):
+@v1.post("/create-study-session", response=StudySessionResponse)
+def create_study_session(request, session_input: StudySessionCreate) -> StudySessionResponse:
     # Create a new study session
     study_session = StudySession.objects.create()
 
@@ -169,11 +182,11 @@ def create_study_session(request, session_input: StudySessionCreate):
             study_session=study_session, question=card.question, answer=card.answer
         )
 
-    return {"session_id": str(study_session.id)}
+    return StudySessionResponse(session_id=str(study_session.id))
 
 
-@v1.get("/get-next-flashcard/{session_id}")
-def get_next_flashcard(request, session_id: str):
+@v1.get("/get-next-flashcard/{session_id}", response={200: FlashcardResponse, 404: dict})
+def get_next_flashcard(request, session_id: str) -> Response:
     study_session = get_object_or_404(StudySession, id=session_id)
 
     # Simple algorithm to get the next flashcard
@@ -186,35 +199,26 @@ def get_next_flashcard(request, session_id: str):
     )
 
     if next_flashcard:
-        return FlashcardResponse(
+        return 200, FlashcardResponse(
             id=str(next_flashcard.id),
             question=next_flashcard.question,
             answer=next_flashcard.answer,
         )
     else:
-        return {"message": "No more flashcards in this session"}
+        return 404, {"message": "No more flashcards in this session"}
 
 
-@v1.post("/study-flashcard/{session_id}")
-def study_flashcard(request, session_id: str, study_input: FlashcardStudyInput):
+@v1.post("/study-flashcard/{session_id}", response=FlashcardStudyResponse)
+def study_flashcard(request, session_id: str, study_input: FlashcardStudyInput) -> FlashcardStudyResponse:
     study_session = get_object_or_404(StudySession, id=session_id)
     flashcard = get_object_or_404(
         Flashcard, id=study_input.flashcard_id, study_session=study_session
     )
 
-    knowledge_level = study_input.knowledge_level if study_input.is_correct else 3
-
     FlashcardStudy.objects.create(
         flashcard=flashcard,
         study_session=study_session,
-        knowledge_level=knowledge_level,
+        knowledge_level=study_input.knowledge_level,
     )
 
-    return {"message": "Flashcard study recorded successfully"}
-
-
-# @v1.post("/end-study-session/{session_id}")
-# def end_study_session(request, session_id: str):
-#     study_session = get_object_or_404(StudySession, id=session_id)
-#     # You can add any cleanup or finalization logic here if needed
-#     return {"message": "Study session ended successfully"}
+    return FlashcardStudyResponse(message="Flashcard study recorded successfully")

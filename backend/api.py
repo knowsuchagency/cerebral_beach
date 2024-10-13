@@ -9,7 +9,6 @@ from ninja import NinjaAPI, Router
 from ninja.responses import Response
 from pydantic import BaseModel, Field
 from typing import List, Optional
-import uuid
 
 from backend.core.models import Flashcard, FlashcardStudy, StudySession
 

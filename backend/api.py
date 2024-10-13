@@ -78,8 +78,8 @@ def extract_content_from_pdf(pdf_base64):
             raise Exception(f"PDF parsing failed with status: {status}")
         time.sleep(3)  # Wait before checking again
     
-    # Get results in Markdown
-    result_url = f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}/result/markdown"
+    # Get results in Text
+    result_url = f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}/result/text"
     result_response = requests.get(result_url, headers=headers)
     result_response.raise_for_status()
     

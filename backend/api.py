@@ -1,26 +1,34 @@
 from ninja import NinjaAPI, Router
 from promptic import llm
 from pydantic import BaseModel
+import os
 
-api = NinjaAPI(
-    title="JIT Learning"
-)
+api = NinjaAPI(title="JIT Learning")
 
 v1 = Router()
 
 api.add_router("/v1", v1)
 
+
 class FlashCard(BaseModel):
     question: str
     answer: str
 
+
 class FlashCards(BaseModel):
     cards: list[FlashCard]
 
+class GenerateFlashcardsInput(BaseModel):
+    raw_data: str
+
 
 @v1.post("/generate-flashcards")
-def generate_flashcards(request, raw_data: str, model="gemini/gemini-1.5-pro-latest"):
-    @llm(model=model)
+def generate_flashcards(request, flashcards_input: GenerateFlashcardsInput, model="gemini/gemini-1.5-pro-latest"):
+    @llm(
+        model=model,
+        # base_url="https://llm.kindo.ai/v1",
+        # api_key=os.getenv("KINDO_API_KEY"),
+    )
     def generate(raw_data: str) -> FlashCards:
         """
         You are an AI assistant tasked with generating flashcards from raw data. Your goal is to create informative and engaging flashcards that capture the essential information from the provided data. Follow these instructions carefully to produce high-quality flashcards in the required format.
@@ -48,5 +56,5 @@ def generate_flashcards(request, raw_data: str, model="gemini/gemini-1.5-pro-lat
 
         Begin your task now. Analyze the raw data, generate the flashcards, and provide the output as instructed.
         """
-    
-    return generate(raw_data)
+
+    return generate(flashcards_input.raw_data)

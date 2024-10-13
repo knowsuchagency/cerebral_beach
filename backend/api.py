@@ -73,6 +73,7 @@ class EndStudySessionResponse(BaseModel):
 
 
 def extract_content_from_pdf(pdf_base64):
+    return "test"
     llama_api_key = os.getenv("LLAMA_CLOUD_API_KEY")
     upload_url = "https://api.cloud.llamaindex.ai/api/parsing/upload"
 

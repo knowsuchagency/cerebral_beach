@@ -1,7 +1,8 @@
 import os
 import re
-
+import base64
 import requests
+import time
 from django.db.models import Avg
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Router
@@ -26,11 +27,13 @@ class FlashCards(BaseModel):
 
 
 class GenerateFlashcardsInput(BaseModel):
-    raw_data: str
+    raw_data: str = None
+    pdf_base64: str = None
 
 
 class StudySessionCreate(BaseModel):
-    raw_data: str
+    raw_data: str = None
+    pdf_base64: str = None
 
 
 class FlashcardStudyInput(BaseModel):
@@ -45,12 +48,55 @@ class FlashcardResponse(BaseModel):
     answer: str
 
 
+def extract_content_from_pdf(pdf_base64):
+    llama_api_key = os.getenv("LLAMA_CLOUD_API_KEY")
+    upload_url = "https://api.cloud.llamaindex.ai/api/parsing/upload"
+    
+    # Decode base64 string to bytes
+    pdf_bytes = base64.b64decode(pdf_base64)
+    
+    # Upload file and start parsing
+    files = {'file': ('document.pdf', pdf_bytes, 'application/pdf')}
+    headers = {
+        "Authorization": f"Bearer {llama_api_key}",
+        "accept": "application/json"
+    }
+    
+    response = requests.post(upload_url, headers=headers, files=files)
+    response.raise_for_status()
+    job_id = response.json()['job_id']
+    
+    # Check job status until complete
+    status_url = f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}"
+    while True:
+        status_response = requests.get(status_url, headers=headers)
+        status_response.raise_for_status()
+        status = status_response.json()['status']
+        if status == 'COMPLETED':
+            break
+        elif status in ['FAILED', 'CANCELLED']:
+            raise Exception(f"PDF parsing failed with status: {status}")
+        time.sleep(3)  # Wait before checking again
+    
+    # Get results in Markdown
+    result_url = f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}/result/markdown"
+    result_response = requests.get(result_url, headers=headers)
+    result_response.raise_for_status()
+    
+    return result_response.text
+
+
 @v1.post("/generate-flashcards")
 def generate_flashcards(
     request,
     flashcards_input: GenerateFlashcardsInput,
     model="azure/gpt-4o",
 ):
+    if flashcards_input.pdf_base64:
+        raw_data = extract_content_from_pdf(flashcards_input.pdf_base64)
+    else:
+        raw_data = flashcards_input.raw_data
+
     api_key = os.getenv("KINDO_API_KEY")
     url = "https://llm.kindo.ai/v1/chat/completions"
 
@@ -75,7 +121,7 @@ def generate_flashcards(
     Output your final set of flashcards in JSON format. The JSON should be an object with a single key "cards", which contains an array of flashcard objects. Each flashcard object should have "question" and "answer" keys.
     """
 
-    user_message = f"Here is the raw data to generate flashcards from:\n\n{flashcards_input.raw_data}"
+    user_message = f"Here is the raw data to generate flashcards from:\n\n{raw_data}"
 
     payload = {
         "model": model,
@@ -114,7 +160,7 @@ def create_study_session(request, session_input: StudySessionCreate):
 
     # Generate flashcards using the existing generate_flashcards function
     flashcards_data = generate_flashcards(
-        request, GenerateFlashcardsInput(raw_data=session_input.raw_data)
+        request, GenerateFlashcardsInput(raw_data=session_input.raw_data, pdf_base64=session_input.pdf_base64)
     )
 
     # Create Flashcard objects and associate them with the study session

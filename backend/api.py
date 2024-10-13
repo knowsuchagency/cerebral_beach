@@ -87,7 +87,7 @@ def extract_content_from_pdf(pdf_base64):
     response.raise_for_status()
     response_json = response.json()
     print(f"{response_json = }")
-    job_id = response_json["job_id"]
+    job_id = response_json["id"]
 
     # Check job status until complete
     status_url = f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}"

@@ -143,3 +143,5 @@ dist
 .ruff_cache/
 
 db.sqlite3
+
+.DS_Store

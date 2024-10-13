@@ -73,7 +73,6 @@ class EndStudySessionResponse(BaseModel):
 
 
 def extract_content_from_pdf(pdf_base64):
-    return "test"
     llama_api_key = os.getenv("LLAMA_CLOUD_API_KEY")
     upload_url = "https://api.cloud.llamaindex.ai/api/parsing/upload"
 
@@ -96,11 +95,13 @@ def extract_content_from_pdf(pdf_base64):
         status_response = requests.get(status_url, headers=headers)
         status_response.raise_for_status()
         status = status_response.json()["status"]
-        if status == "COMPLETED":
+        print(f"{status = }")
+        if status == "SUCCESS":
             break
         elif status in ["FAILED", "CANCELLED"]:
             raise Exception(f"PDF parsing failed with status: {status}")
         time.sleep(3)  # Wait before checking again
+        
 
     # Get results in Text
     result_url = f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}/result/text"

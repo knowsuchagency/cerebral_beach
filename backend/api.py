@@ -7,7 +7,7 @@ from django.db.models import Avg
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Router
 from ninja.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 
 from backend.core.models import Flashcard, FlashcardStudy, StudySession
@@ -40,7 +40,14 @@ class StudySessionCreate(BaseModel):
 
 class FlashcardStudyInput(BaseModel):
     flashcard_id: str
-    knowledge_level: int
+    knowledge_level: int = Field(..., ge=1, le=3)
+
+    @field_validator('knowledge_level')
+    @classmethod
+    def validate_knowledge_level(cls, v):
+        if v < 1 or v > 3:
+            raise ValueError('Knowledge level must be between 1 and 3')
+        return v
 
 
 class FlashcardResponse(BaseModel):

@@ -42,11 +42,11 @@ class FlashcardStudyInput(BaseModel):
     flashcard_id: str
     knowledge_level: int = Field(..., ge=1, le=3)
 
-    @field_validator('knowledge_level')
+    @field_validator("knowledge_level")
     @classmethod
     def validate_knowledge_level(cls, v):
         if v < 1 or v > 3:
-            raise ValueError('Knowledge level must be between 1 and 3')
+            raise ValueError("Knowledge level must be between 1 and 3")
         return v
 
 
@@ -60,8 +60,10 @@ class FlashcardResponse(BaseModel):
 class StudySessionResponse(BaseModel):
     session_id: str = Field(..., description="The ID of the created study session")
 
+
 class FlashcardStudyResponse(BaseModel):
     message: str = Field(..., description="A success message")
+
 
 class EndStudySessionResponse(BaseModel):
     message: str = Field(..., description="A success message")
@@ -70,116 +72,51 @@ class EndStudySessionResponse(BaseModel):
 def extract_content_from_pdf(pdf_base64):
     llama_api_key = os.getenv("LLAMA_CLOUD_API_KEY")
     upload_url = "https://api.cloud.llamaindex.ai/api/parsing/upload"
-    
+
     # Decode base64 string to bytes
     pdf_bytes = base64.b64decode(pdf_base64)
-    
+
     # Upload file and start parsing
-    files = {'file': ('document.pdf', pdf_bytes, 'application/pdf')}
-    headers = {
-        "Authorization": f"Bearer {llama_api_key}",
-        "accept": "application/json"
-    }
-    
+    files = {"file": ("document.pdf", pdf_bytes, "application/pdf")}
+    headers = {"Authorization": f"Bearer {llama_api_key}", "accept": "application/json"}
+
     response = requests.post(upload_url, headers=headers, files=files)
     response.raise_for_status()
-    job_id = response.json()['job_id']
-    
+    job_id = response.json()["job_id"]
+
     # Check job status until complete
     status_url = f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}"
     while True:
         status_response = requests.get(status_url, headers=headers)
         status_response.raise_for_status()
-        status = status_response.json()['status']
-        if status == 'COMPLETED':
+        status = status_response.json()["status"]
+        if status == "COMPLETED":
             break
-        elif status in ['FAILED', 'CANCELLED']:
+        elif status in ["FAILED", "CANCELLED"]:
             raise Exception(f"PDF parsing failed with status: {status}")
         time.sleep(3)  # Wait before checking again
-    
+
     # Get results in Text
     result_url = f"https://api.cloud.llamaindex.ai/api/parsing/job/{job_id}/result/text"
     result_response = requests.get(result_url, headers=headers)
     result_response.raise_for_status()
-    
+
     return result_response.text
 
 
-@v1.post("/generate-flashcards", response=FlashCards)
-def generate_flashcards(
-    request,
-    flashcards_input: GenerateFlashcardsInput,
-    model="azure/gpt-4o",
-) -> FlashCards:
-    if flashcards_input.pdf_base64:
-        raw_data = extract_content_from_pdf(flashcards_input.pdf_base64)
-    else:
-        raw_data = flashcards_input.raw_data
-
-    api_key = os.getenv("KINDO_API_KEY")
-    url = "https://llm.kindo.ai/v1/chat/completions"
-
-    headers = {"api-key": api_key, "content-type": "application/json"}
-
-    system_message = """
-    You are an AI assistant tasked with generating flashcards from raw data. Your goal is to create informative and engaging flashcards that capture the essential information from the provided data. Follow these instructions carefully to produce high-quality flashcards in the required format.
-
-    Analyze the raw data carefully. Identify key concepts, facts, definitions, and relationships within the information provided. Look for important terms, dates, events, or any other significant details that would be suitable for flashcards.
-
-    Generate flashcards based on the analyzed data. Each flashcard should consist of a question (front of the card) and an answer (back of the card). Ensure that the questions are clear and concise, and the answers are accurate and informative.
-
-    Follow these guidelines when creating the flashcards:
-    1. Ensure diversity in the types of questions (e.g., definitions, comparisons, cause-and-effect, etc.)
-    2. Make the questions challenging but not overly complex
-    3. Keep the answers concise but informative
-    4. Avoid repetition of information across flashcards
-    5. Ensure that all information in the flashcards is directly derived from the provided raw data
-
-    Once you have generated the flashcards, review them for accuracy, clarity, and relevance. Make any necessary adjustments to improve their quality.
-
-    Output your final set of flashcards in JSON format. The JSON should be an object with a single key "cards", which contains an array of flashcard objects. Each flashcard object should have "question" and "answer" keys.
-    """
-
-    user_message = f"Here is the raw data to generate flashcards from:\n\n{raw_data}"
-
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message},
-        ],
-    }
-
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()  # This will raise an exception for HTTP errors
-
-    # Parse the JSON response
-    response_data = response.json()
-    flashcards_content = response_data["choices"][0]["message"]["content"]
-
-    # Try to parse the content as JSON directly
-    try:
-        flashcards = FlashCards.model_validate_json(flashcards_content)
-    except ValueError:
-        # If direct parsing fails, try to extract JSON from markdown code blocks
-        json_match = re.search(r"```json\s*([\s\S]*?)\s*```", flashcards_content)
-        if json_match:
-            flashcards_json = json_match.group(1)
-            flashcards = FlashCards.model_validate_json(flashcards_json)
-        else:
-            raise ValueError("Unable to parse flashcards from the response")
-
-    return flashcards
-
-
 @v1.post("/create-study-session", response=StudySessionResponse)
-def create_study_session(request, session_input: StudySessionCreate) -> StudySessionResponse:
+def create_study_session(
+    request, session_input: StudySessionCreate
+) -> StudySessionResponse:
     # Create a new study session
     study_session = StudySession.objects.create()
 
     # Generate flashcards using the existing generate_flashcards function
     flashcards_data = generate_flashcards(
-        request, GenerateFlashcardsInput(raw_data=session_input.raw_data, pdf_base64=session_input.pdf_base64)
+        request,
+        GenerateFlashcardsInput(
+            raw_data=session_input.raw_data, pdf_base64=session_input.pdf_base64
+        ),
     )
 
     # Create Flashcard objects and associate them with the study session
@@ -191,7 +128,9 @@ def create_study_session(request, session_input: StudySessionCreate) -> StudySes
     return StudySessionResponse(session_id=str(study_session.id))
 
 
-@v1.get("/get-next-flashcard/{session_id}", response={200: FlashcardResponse, 404: dict})
+@v1.get(
+    "/get-next-flashcard/{session_id}", response={200: FlashcardResponse, 404: dict}
+)
 def get_next_flashcard(request, session_id: str) -> Response:
     study_session = get_object_or_404(StudySession, id=session_id)
 
@@ -215,7 +154,9 @@ def get_next_flashcard(request, session_id: str) -> Response:
 
 
 @v1.post("/study-flashcard/{session_id}", response=FlashcardStudyResponse)
-def study_flashcard(request, session_id: str, study_input: FlashcardStudyInput) -> FlashcardStudyResponse:
+def study_flashcard(
+    request, session_id: str, study_input: FlashcardStudyInput
+) -> FlashcardStudyResponse:
     study_session = get_object_or_404(StudySession, id=session_id)
     flashcard = get_object_or_404(
         Flashcard, id=study_input.flashcard_id, study_session=study_session

@@ -1,9 +1,13 @@
+import os
+import re
+
+import requests
+from django.db.models import Avg
+from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Router
 from pydantic import BaseModel
-import os
-import requests
-import json
-import re
+
+from backend.core.models import Flashcard, FlashcardStudy, StudySession
 
 api = NinjaAPI(title="JIT Learning")
 
@@ -20,19 +24,37 @@ class FlashCard(BaseModel):
 class FlashCards(BaseModel):
     cards: list[FlashCard]
 
+
 class GenerateFlashcardsInput(BaseModel):
     raw_data: str
 
 
+class StudySessionCreate(BaseModel):
+    raw_data: str
+
+
+class FlashcardStudyInput(BaseModel):
+    flashcard_id: str
+    knowledge_level: int
+    is_correct: bool
+
+
+class FlashcardResponse(BaseModel):
+    id: str
+    question: str
+    answer: str
+
+
 @v1.post("/generate-flashcards")
-def generate_flashcards(request, flashcards_input: GenerateFlashcardsInput, model="azure/gpt-4o"):
+def generate_flashcards(
+    request,
+    flashcards_input: GenerateFlashcardsInput,
+    model="azure/gpt-4o",
+):
     api_key = os.getenv("KINDO_API_KEY")
     url = "https://llm.kindo.ai/v1/chat/completions"
 
-    headers = {
-        "api-key": api_key,
-        "content-type": "application/json"
-    }
+    headers = {"api-key": api_key, "content-type": "application/json"}
 
     system_message = """
     You are an AI assistant tasked with generating flashcards from raw data. Your goal is to create informative and engaging flashcards that capture the essential information from the provided data. Follow these instructions carefully to produce high-quality flashcards in the required format.
@@ -59,8 +81,8 @@ def generate_flashcards(request, flashcards_input: GenerateFlashcardsInput, mode
         "model": model,
         "messages": [
             {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message}
-        ]
+            {"role": "user", "content": user_message},
+        ],
     }
 
     response = requests.post(url, headers=headers, json=payload)
@@ -68,14 +90,14 @@ def generate_flashcards(request, flashcards_input: GenerateFlashcardsInput, mode
 
     # Parse the JSON response
     response_data = response.json()
-    flashcards_content = response_data['choices'][0]['message']['content']
+    flashcards_content = response_data["choices"][0]["message"]["content"]
 
     # Try to parse the content as JSON directly
     try:
         flashcards = FlashCards.model_validate_json(flashcards_content)
     except ValueError:
         # If direct parsing fails, try to extract JSON from markdown code blocks
-        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', flashcards_content)
+        json_match = re.search(r"```json\s*([\s\S]*?)\s*```", flashcards_content)
         if json_match:
             flashcards_json = json_match.group(1)
             flashcards = FlashCards.model_validate_json(flashcards_json)
@@ -83,3 +105,70 @@ def generate_flashcards(request, flashcards_input: GenerateFlashcardsInput, mode
             raise ValueError("Unable to parse flashcards from the response")
 
     return flashcards
+
+
+@v1.post("/create-study-session")
+def create_study_session(request, session_input: StudySessionCreate):
+    # Create a new study session
+    study_session = StudySession.objects.create()
+
+    # Generate flashcards using the existing generate_flashcards function
+    flashcards_data = generate_flashcards(
+        request, GenerateFlashcardsInput(raw_data=session_input.raw_data)
+    )
+
+    # Create Flashcard objects and associate them with the study session
+    for card in flashcards_data.cards:
+        Flashcard.objects.create(
+            study_session=study_session, question=card.question, answer=card.answer
+        )
+
+    return {"session_id": str(study_session.id)}
+
+
+@v1.get("/get-next-flashcard/{session_id}")
+def get_next_flashcard(request, session_id: str):
+    study_session = get_object_or_404(StudySession, id=session_id)
+
+    # Simple algorithm to get the next flashcard
+    # Prioritize cards with higher average knowledge level (less known)
+    next_flashcard = (
+        Flashcard.objects.filter(study_session=study_session)
+        .annotate(avg_knowledge=Avg("studies__knowledge_level"))
+        .order_by("-avg_knowledge", "?")
+        .first()
+    )
+
+    if next_flashcard:
+        return FlashcardResponse(
+            id=str(next_flashcard.id),
+            question=next_flashcard.question,
+            answer=next_flashcard.answer,
+        )
+    else:
+        return {"message": "No more flashcards in this session"}
+
+
+@v1.post("/study-flashcard/{session_id}")
+def study_flashcard(request, session_id: str, study_input: FlashcardStudyInput):
+    study_session = get_object_or_404(StudySession, id=session_id)
+    flashcard = get_object_or_404(
+        Flashcard, id=study_input.flashcard_id, study_session=study_session
+    )
+
+    knowledge_level = study_input.knowledge_level if study_input.is_correct else 3
+
+    FlashcardStudy.objects.create(
+        flashcard=flashcard,
+        study_session=study_session,
+        knowledge_level=knowledge_level,
+    )
+
+    return {"message": "Flashcard study recorded successfully"}
+
+
+# @v1.post("/end-study-session/{session_id}")
+# def end_study_session(request, session_id: str):
+#     study_session = get_object_or_404(StudySession, id=session_id)
+#     # You can add any cleanup or finalization logic here if needed
+#     return {"message": "Study session ended successfully"}
